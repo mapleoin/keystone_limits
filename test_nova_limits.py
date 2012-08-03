@@ -483,9 +483,8 @@ class TestNovaClassLimit(unittest.TestCase):
             }
         params = {}
         unused = {}
-        with self.assertRaises(limits.DeferLimit):
-            self.lim.filter(environ, params, unused)
-
+        self.assertRaises(limits.DeferLimit,
+                          self.lim.filter, environ, params, unused)
         self.assertEqual(environ, {
                 'turnstile.nova.tenant': 'tenant',
                 })
@@ -498,8 +497,8 @@ class TestNovaClassLimit(unittest.TestCase):
             }
         params = {}
         unused = {}
-        with self.assertRaises(limits.DeferLimit):
-            self.lim.filter(environ, params, unused)
+        self.assertRaises(limits.DeferLimit,
+                          self.lim.filter, environ, params, unused)
 
         self.assertEqual(environ, {
                 'turnstile.nova.limitclass': 'lim_class',
@@ -514,8 +513,8 @@ class TestNovaClassLimit(unittest.TestCase):
             }
         params = {}
         unused = {}
-        with self.assertRaises(limits.DeferLimit):
-            self.lim.filter(environ, params, unused)
+        self.assertRaises(limits.DeferLimit,
+                          self.lim.filter, environ, params, unused)
 
         self.assertEqual(environ, {
                 'turnstile.nova.limitclass': 'spam',
@@ -745,8 +744,7 @@ class TestToolLimitClass(unittest.TestCase):
 
         self.args_dict['debug'] = True
         self.limit_class_result = AnException("foobar")
-        with self.assertRaises(AnException):
-            nova_limits.limit_class()
+        self.assertRaises(Exception, nova_limits.limit_class)
         self.assertEqual(self.stdout.getvalue(), '')
 
     def test_update(self):
