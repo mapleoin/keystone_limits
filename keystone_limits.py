@@ -13,15 +13,20 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import argparse
 import string
 import time
 
-import argparse
 import msgpack
-from nova.api.openstack import wsgi
 from turnstile import limits
 from turnstile import middleware
 from turnstile import tools
+
+from nova.api.openstack import wsgi
+from keystone.common import logging
+
+
+LOG = logging.getLogger(__name__)
 
 
 class ParamsDict(dict):
@@ -38,31 +43,67 @@ class ParamsDict(dict):
         return '{%s}' % key
 
 
-def nova_preprocess(midware, environ):
+def keystone_preprocess(midware, environ):
     """
-    Pre-process requests to nova.  The tenant name is extracted from
-    the nova context, and the applicable rate limit class is looked up
-    in the database.  Both pieces of data are attached to the request
+    Pre-process requests to keystone.  The tenant name is extracted from
+    the keystone context, and the applicable rate limit class is looked
+    up in the database.  Both pieces of data are attached to the request
     environment.  This preprocessor must be present to use the
-    NovaClassLimit rate limiting class.
+    KeystoneClassLimit rate limiting class.
     """
 
     # We may need a formatter later on, so set one up
     fmt = string.Formatter()
 
+    from keystone.identity import Manager
+    identity_api = Manager()
+    context = None  # NOTE(iartarisi) where do I find a context?
+    try:
+        auth = environ['openstack.params']['auth']
+        try:
+            username = auth['passwordCredentials']['username']
+        except KeyError:
+            try:
+                tenant_name = auth['tenantName']
+                tenant = identity_api.get_tenant_by_name(
+                    context, tenant_name)['id']
+            except KeyError:
+                tenant = auth['tenantId']
+        else:
+            try:
+                tenant = identity_api.get_user_by_name(
+                    context, username)['tenantId']
+            except KeyError:
+                # couldn't find the username in the database. Maybe we're
+                # using a weird keystone backend like 'hybrid' and the
+                # user_id is the same as the username
+
+                # NOTE(iartarisi) this is kind of bad actually, we'd
+                # like to get the current tenant, not all of them
+                tenant = identity_api.get_tenants_for_user(
+                    context, username)[0]
+    except (KeyError, TypeError):
+        try:
+            tenant = environ['openstack.context']['tenant_id']
+        except (KeyError, TypeError):
+            LOG.debug("Couldn't figure out the tenant_id from the environ: "
+                      + str(environ))
+            tenant = '<NONE>'
+    
+    LOG.debug("TEENAAANT: %s" % tenant)
     # First, figure out the tenant
-    context = environ.get('nova.context')
-    if context:
-        tenant = context.project_id
-    else:
-        # There *should* be a tenant by now, but let's be liberal
-        # in what we accept
-        tenant = '<NONE>'
+    # context = environ.get('openstack.context')
+    # if context:
+    #     tenant = context.project_id
+    # else:
+    #     # There *should* be a tenant by now, but let's be liberal
+    #     # in what we accept
+    #     tenant = '<NONE>'
     environ['turnstile.nova.tenant'] = tenant
 
     # Now, figure out the rate limit class
     klass = midware.db.get('limit-class:%s' % tenant) or 'default'
-    klass = environ.setdefault('turnstile.nova.limitclass', klass)
+    klass = environ.setdefault('turnstile.keystone.limitclass', klass)
 
     # Grab a list of the available buckets and index them by UUID
     #
@@ -165,7 +206,7 @@ def nova_preprocess(midware, environ):
     environ['nova.limits'] = limits
 
 
-class NovaClassLimit(limits.Limit):
+class KeystoneClassLimit(limits.Limit):
     """
     Rate limiting class for applying rate limits to classes of Nova
     tenants.  The nova_limits:nova_preprocess preprocessor must be
@@ -207,7 +248,7 @@ class NovaClassLimit(limits.Limit):
         params['tenant'] = environ['turnstile.nova.tenant']
 
 
-class NovaTurnstileMiddleware(middleware.TurnstileMiddleware):
+class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):
     """
     Subclass of TurnstileMiddleware.
 
