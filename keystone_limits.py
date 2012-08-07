@@ -24,7 +24,7 @@ from turnstile import tools
 
 from nova.api.openstack import wsgi
 from keystone.common import logging
-
+from keystone.identity import Manager
 
 LOG = logging.getLogger(__name__)
 
@@ -55,7 +55,6 @@ def keystone_preprocess(midware, environ):
     # We may need a formatter later on, so set one up
     fmt = string.Formatter()
 
-    from keystone.identity import Manager
     identity_api = Manager()
     context = None  # NOTE(iartarisi) where do I find a context?
     try:
@@ -65,10 +64,11 @@ def keystone_preprocess(midware, environ):
         except KeyError:
             try:
                 tenant_name = auth['tenantName']
-                tenant = identity_api.get_tenant_by_name(
-                    context, tenant_name)['id']
             except KeyError:
                 tenant = auth['tenantId']
+            else:
+                tenant = identity_api.get_tenant_by_name(
+                    context, tenant_name)['id']
         else:
             try:
                 tenant = identity_api.get_user_by_name(
@@ -91,19 +91,14 @@ def keystone_preprocess(midware, environ):
             tenant = '<NONE>'
     
     LOG.debug("TEENAAANT: %s" % tenant)
-    # First, figure out the tenant
-    # context = environ.get('openstack.context')
-    # if context:
-    #     tenant = context.project_id
-    # else:
-    #     # There *should* be a tenant by now, but let's be liberal
-    #     # in what we accept
-    #     tenant = '<NONE>'
-    environ['turnstile.nova.tenant'] = tenant
+
+    environ['turnstile.keystone.tenant'] = tenant
 
     # Now, figure out the rate limit class
     klass = midware.db.get('limit-class:%s' % tenant) or 'default'
+    LOG.debug("Rate limit class: %s" % klass)
     klass = environ.setdefault('turnstile.keystone.limitclass', klass)
+    LOG.debug("Rate limit class: %s" % klass)
 
     # Grab a list of the available buckets and index them by UUID
     #
@@ -129,6 +124,7 @@ def keystone_preprocess(midware, environ):
     # Finally, translate Turnstile limits into Nova limits, so we can
     # use Nova's /limits endpoint
     limits = []
+    LOG.debug("Midware limits: %s %s" % (midware, midware.limits))
     for turns_lim in midware.limits:
         # If the limit has a rate_class, ensure it equals the
         # appropriate one for the user.  If the limit does not have a
@@ -202,8 +198,7 @@ def keystone_preprocess(midware, environ):
                     resetTime=resetTime,
                     ))
 
-    # Save the limits for Nova to use
-    environ['nova.limits'] = limits
+    LOG.debug("Limits: " + str(limits))
 
 
 class KeystoneClassLimit(limits.Limit):
@@ -239,13 +234,13 @@ class KeystoneClassLimit(limits.Limit):
         """
 
         # Do we match?
-        if ('turnstile.nova.tenant' not in environ or
-            'turnstile.nova.limitclass' not in environ or
-            self.rate_class != environ['turnstile.nova.limitclass']):
+        if ('turnstile.keystone.tenant' not in environ or
+            'turnstile.keystone.limitclass' not in environ or
+            self.rate_class != environ['turnstile.keystone.limitclass']):
             raise limits.DeferLimit()
 
         # OK, add the tenant to the params
-        params['tenant'] = environ['turnstile.nova.tenant']
+        params['tenant'] = environ['turnstile.keystone.tenant']
 
 
 class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):
