@@ -31,6 +31,14 @@ for a tenant is ``default``.)  Setting ``rate_class`` on
 ``NovaClassLimit`` restricts the limiting action to only those tenants
 in the given rate-limit class.
 
-Also note that, for nova, the URIs used in configuring rate limiting
-must include the version identifier, i.e.,
-"/v2/{tenant}/servers/detail".
+
+Rate Classes
+============
+
+In order to set which tenants belong to which limit class, you must
+insert this information into the redis database yourself. For example,
+in order to set a tenant with id '1234' to be part of the rate_class
+(set in the XML document mentioned above) called 'my_rate_class' you
+would have to:
+
+``set limit-class:1234 my_rate_class``
