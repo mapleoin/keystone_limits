@@ -141,13 +141,13 @@ def keystone_preprocess(midware, environ):
                       + str(environ))
             tenant = '<NONE>'
     
-    LOG.debug("TEENAAANT: %s" % tenant)
+    LOG.warn("Found tenant: %s" % tenant)
 
     environ['turnstile.keystone.tenant'] = tenant
 
     # Now, figure out the rate limit class
     klass = midware.db.get('limit-class:%s' % tenant) or 'default'
-    LOG.debug("Rate limit class: %s" % klass)
+    LOG.warn("Rate limit class: %s" % klass)
     klass = environ.setdefault('turnstile.keystone.limitclass', klass)
     LOG.debug("Rate limit class: %s" % klass)
 
@@ -327,8 +327,10 @@ class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):
         fault = wsgi.OverLimitFault(msg, error, retry)
 
         # Now let's call it and return the result
-        return fault(environ, start_response)
-
+        response = fault(environ, start_response)
+        LOG.warning(response)
+        
+        return response
 
 def _limit_class(config, tenant, klass=None):
     """
