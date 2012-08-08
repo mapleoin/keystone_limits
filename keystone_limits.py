@@ -21,14 +21,65 @@ import msgpack
 from turnstile import limits
 from turnstile import middleware
 from turnstile import tools
+import webob
 
-from nova.api.openstack import wsgi
 from keystone.common import logging
+from keystone.common.wsgi import Request
 from keystone.identity import Manager
+from keystone.exception import Error
 
 LOG = logging.getLogger(__name__)
 
 
+class OverLimitFault(webob.exc.HTTPException):
+    """
+    Rate-limited request response.
+    """
+    # NOTE(iartarisi) this is a copy of
+    # nova.api.openstack.OverLimitFault for scenarios where nova is not
+    # installed on the same host as keystone
+    def __init__(self, message, details, retry_time):
+        """
+        Initialize new `OverLimitFault` with relevant information.
+        """
+        hdrs = OverLimitFault._retry_after(retry_time)
+        self.wrapped_exc = webob.exc.HTTPRequestEntityTooLarge(headers=hdrs)
+        self.content = {
+            "overLimitFault": {
+                "code": 413,
+                "message": message,
+                "details": details,
+            },
+        }
+
+    @staticmethod
+    def _retry_after(retry_time):
+        delay = int(math.ceil(retry_time - time.time()))
+        retry_after = delay if delay > 0 else 0
+        headers = {'Retry-After': '%d' % retry_after}
+        return headers
+
+    @webob.dec.wsgify(RequestClass=Request)
+    def __call__(self, request):
+        """
+        Return the wrapped exception with a serialized body conforming to our
+        error format.
+        """
+        content_type = request.best_match_content_type()
+        metadata = {"attributes": {"overLimitFault": "code"}}
+
+        xml_serializer = XMLDictSerializer(metadata, XMLNS_V11)
+        serializer = {
+            'application/xml': xml_serializer,
+            'application/json': JSONDictSerializer(),
+        }[content_type]
+
+        content = serializer.serialize(self.content)
+        self.wrapped_exc.body = content
+
+        return self.wrapped_exc
+
+    
 class ParamsDict(dict):
     """
     Special dictionary for use with our URI formatter below.  Unknown
@@ -248,14 +299,14 @@ class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):
     Subclass of TurnstileMiddleware.
 
     This version of TurnstileMiddleware overrides the format_delay()
-    method to utilize Nova's OverLimitFault.
+    method to utilize OverLimitFault.
     """
 
     def format_delay(self, delay, limit, bucket, environ, start_response):
         """
         Formats the over-limit response for the request.  This variant
-        utilizes Nova's OverLimitFault for consistency with Nova's
-        rate-limiting.
+        utilizes a copy of Nova's OverLimitFault for consistency with
+        Nova's rate-limiting.
         """
 
         # Build the error message based on the limit's values
