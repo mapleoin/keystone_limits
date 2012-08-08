@@ -1,15 +1,11 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <limits>
   <limit class="keystone_limits:KeystoneClassLimit">
-    <attr name="requirements">
-      <value key="all">.*</value>
-    </attr>
     <attr name="rate_class">default</attr>
     <attr name="unit">minute</attr>
-    <attr name="uri">{all}</attr>
+    <attr name="uri">/tokens</attr>
     <attr name="value">2</attr>
     <attr name="verbs">
-      <value>GET</value>
       <value>POST</value>
     </attr>
   </limit>
