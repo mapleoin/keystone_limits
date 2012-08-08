@@ -113,17 +113,12 @@ def keystone_preprocess(midware, environ):
         try:
             username = auth['passwordCredentials']['username']
         except KeyError:
-            try:
-                tenant_name = auth['tenantName']
-            except KeyError:
-                tenant = auth['tenantId']
-            else:
-                tenant = identity_api.get_tenant_by_name(
-                    context, tenant_name)['id']
+            # TODO(iartarisi) figure out where to get the username from
+            user_id = '<NONE>'
         else:
             try:
-                tenant = identity_api.get_user_by_name(
-                    context, username)['tenantId']
+                user_id = identity_api.get_user_by_name(
+                    context, username)['id']
             except KeyError:
                 # couldn't find the username in the database. Maybe we're
                 # using a weird keystone backend like 'hybrid' and the
@@ -131,25 +126,21 @@ def keystone_preprocess(midware, environ):
 
                 # NOTE(iartarisi) this is kind of bad actually, we'd
                 # like to get the current tenant, not all of them
-                tenant = identity_api.get_tenants_for_user(
-                    context, username)[0]
-    except (KeyError, TypeError):
-        try:
-            tenant = environ['openstack.context']['tenant_id']
-        except (KeyError, TypeError):
-            LOG.debug("Couldn't figure out the tenant_id from the environ: "
-                      + str(environ))
-            tenant = '<NONE>'
+                user_id = username
+    except KeyError:
+        # token-based auth - XXX we don't care. Do we?
+        assert 'token_id' in environ['openstack.context']
+        user_id = '<NONE>'
     
-    LOG.warn("Found tenant: %s" % tenant)
+    LOG.info("Found user_id: %s" % user_id)
 
-    environ['turnstile.keystone.tenant'] = tenant
+    environ['turnstile.keystone.user_id'] = user_id
 
     # Now, figure out the rate limit class
-    klass = midware.db.get('limit-class:%s' % tenant) or 'default'
-    LOG.warn("Rate limit class: %s" % klass)
-    klass = environ.setdefault('turnstile.keystone.limitclass', klass)
+    klass = midware.db.get('limit-class:%s' % user_id) or 'default'
     LOG.debug("Rate limit class: %s" % klass)
+    klass = environ.setdefault('turnstile.keystone.limitclass', klass)
+    LOG.info("Rate limit class: %s" % klass)
 
     # Grab a list of the available buckets and index them by UUID
     #
@@ -285,13 +276,13 @@ class KeystoneClassLimit(limits.Limit):
         """
 
         # Do we match?
-        if ('turnstile.keystone.tenant' not in environ or
+        if ('turnstile.keystone.user_id' not in environ or
             'turnstile.keystone.limitclass' not in environ or
             self.rate_class != environ['turnstile.keystone.limitclass']):
             raise limits.DeferLimit()
 
         # OK, add the tenant to the params
-        params['tenant'] = environ['turnstile.keystone.tenant']
+        params['userid'] = environ['turnstile.keystone.user_id']
 
 
 class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):
