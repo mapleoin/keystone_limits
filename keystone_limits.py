@@ -23,9 +23,10 @@ from turnstile import middleware
 from turnstile import tools
 import webob
 
+from keystone import identity
+from keystone import token
 from keystone.common import logging
 from keystone.common.wsgi import Request
-from keystone.identity import Manager
 from keystone.exception import Error
 
 LOG = logging.getLogger(__name__)
@@ -106,32 +107,27 @@ def keystone_preprocess(midware, environ):
     # We may need a formatter later on, so set one up
     fmt = string.Formatter()
 
-    identity_api = Manager()
-    context = None  # NOTE(iartarisi) where do I find a context?
+    # NOTE(iartarisi) Is this the right context we need for passing around?
+    context = environ['openstack.context']  
     try:
+        token_id = context['token_id']
+        assert token_id
+    except (KeyError, AssertionError):
         auth = environ['openstack.params']['auth']
+        username = auth['passwordCredentials']['username']
         try:
-            username = auth['passwordCredentials']['username']
+            identity_api = identity.Manager()
+            user_id = identity_api.get_user_by_name(
+                context, username)['id']
         except KeyError:
-            # TODO(iartarisi) figure out where to get the username from
-            user_id = '<NONE>'
-        else:
-            try:
-                user_id = identity_api.get_user_by_name(
-                    context, username)['id']
-            except KeyError:
-                # couldn't find the username in the database. Maybe we're
-                # using a weird keystone backend like 'hybrid' and the
-                # user_id is the same as the username
+            # couldn't find the username in the database. Maybe we're
+            # using a weird keystone backend like 'hybrid' and the
+            # user_id is the same as the username
+            user_id = username
+    else:
+        token_api = token.Manager()
+        user_id = token_api.get_token(context, token_id)['user']['id']
 
-                # NOTE(iartarisi) this is kind of bad actually, we'd
-                # like to get the current tenant, not all of them
-                user_id = username
-    except KeyError:
-        # token-based auth - XXX we don't care. Do we?
-        assert 'token_id' in environ['openstack.context']
-        user_id = '<NONE>'
-    
     LOG.info("Found user_id: %s" % user_id)
 
     environ['turnstile.keystone.user_id'] = user_id
