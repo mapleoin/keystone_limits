@@ -122,15 +122,22 @@ def keystone_preprocess(midware, environ):
         token_api = token.Manager()
         user_id = token_api.get_token(context, token_id)['user']['id']
 
-    LOG.info("Found user_id: %s" % user_id)
+    user_ip = environ['REMOTE_ADDR']
+    LOG.info("Found user_id: %s with IP: %s" % (user_id, user_ip))
 
-    environ['turnstile.keystone.user_id'] = user_id
+    id_ip = '%s:%s' % (user_id, user_ip)
+    environ['turnstile.keystone.user_id'] = id_ip
 
     # Now, figure out the rate limit class
-    klass = midware.db.get('limit-class:%s' % user_id) or 'default'
-    LOG.debug("Rate limit class: %s" % klass)
+    klass = midware.db.get('limit-class:' + id_ip)
+    # Automatically create a new class for an ip if it doesn't
+    # exist. This will be a clone of the existing 'ip-class'.
+    if not klass:
+        midware.db.set('limit-class:' + id_ip, 'ip-class')
+        klass = 'ip-class'
+        
     klass = environ.setdefault('turnstile.keystone.limitclass', klass)
-    LOG.info("Rate limit class: %s" % klass)
+    LOG.debug("Rate limit class: %s" % klass)
 
     # Grab a list of the available buckets and index them by UUID
     #
