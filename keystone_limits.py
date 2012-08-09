@@ -14,6 +14,8 @@
 #    under the License.
 
 import argparse
+import json
+import math
 import string
 import time
 
@@ -37,7 +39,7 @@ class OverLimitFault(webob.exc.HTTPException):
     Rate-limited request response.
     """
     # NOTE(iartarisi) this is a copy of
-    # nova.api.openstack.OverLimitFault for scenarios where nova is not
+    # nova.api.openstack.wsgi.OverLimitFault for scenarios where nova is not
     # installed on the same host as keystone
     def __init__(self, message, details, retry_time):
         """
@@ -66,17 +68,9 @@ class OverLimitFault(webob.exc.HTTPException):
         Return the wrapped exception with a serialized body conforming to our
         error format.
         """
-        content_type = request.best_match_content_type()
         metadata = {"attributes": {"overLimitFault": "code"}}
 
-        xml_serializer = XMLDictSerializer(metadata, XMLNS_V11)
-        serializer = {
-            'application/xml': xml_serializer,
-            'application/json': JSONDictSerializer(),
-        }[content_type]
-
-        content = serializer.serialize(self.content)
-        self.wrapped_exc.body = content
+        self.wrapped_exc.body = json.dumps(self.content)
 
         return self.wrapped_exc
 
@@ -311,7 +305,7 @@ class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):
         retry = time.time() + delay
 
         # Convert to a fault class
-        fault = wsgi.OverLimitFault(msg, error, retry)
+        fault = OverLimitFault(msg, error, retry)
 
         # Now let's call it and return the result
         response = fault(environ, start_response)
