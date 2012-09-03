@@ -20,9 +20,9 @@ import string
 import time
 
 import msgpack
+from turnstile import config as turnstile_config
 from turnstile import limits
 from turnstile import middleware
-from turnstile import tools
 import webob
 
 from keystone import identity
@@ -334,7 +334,7 @@ def _limit_class(config, tenant, klass=None):
     """
 
     # Connect to the database...
-    db, _limits_key, _control_channel = tools.parse_config(config)
+    db, _limits_key, _control_channel = turnstile_config.Config().get_database()
 
     # Get the key for the limit class...
     key = 'limit-class:%s' % tenant

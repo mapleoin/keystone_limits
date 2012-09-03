@@ -7,8 +7,8 @@ import unittest
 import argparse
 import msgpack
 import stubout
+from turnstile import config
 from turnstile import limits
-from turnstile import tools
 
 import keystone_limits
 
@@ -582,11 +582,10 @@ class TestLimitClass(unittest.TestCase):
         self.fake_db = FakeDatabase()
         self.stubs = stubout.StubOutForTesting()
 
-        def fake_parse_config(config):
-            self.assertEqual(config, 'config_file')
+        def fake_get_database(sself):
             return self.fake_db, 'limits', 'control'
 
-        self.stubs.Set(tools, 'parse_config', fake_parse_config)
+        self.stubs.Set(config.Config, 'get_database', fake_get_database)
 
     def tearDown(self):
         self.stubs.UnsetAll()
