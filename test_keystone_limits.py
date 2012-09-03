@@ -6,12 +6,11 @@ import unittest
 
 import argparse
 import msgpack
-from nova.api.openstack import wsgi
 import stubout
 from turnstile import limits
 from turnstile import tools
 
-import nova_limits
+import keystone_limits
 
 
 class FakeDatabase(object):
@@ -71,13 +70,13 @@ class FakeLimit(FakeObject):
 
 class TestParamsDict(unittest.TestCase):
     def test_known_keys(self):
-        d = nova_limits.ParamsDict(dict(a=1, bravo=2))
+        d = keystone_limits.ParamsDict(dict(a=1, bravo=2))
 
         self.assertEqual(d['a'], 1)
         self.assertEqual(d['bravo'], 2)
 
     def test_unknown_keys(self):
-        d = nova_limits.ParamsDict(dict(a=1, b=2))
+        d = keystone_limits.ParamsDict(dict(a=1, b=2))
 
         self.assertEqual(d['c'], '{c}')
         self.assertEqual(d['delta'], '{delta}')
@@ -97,11 +96,11 @@ class TestPreprocess(unittest.TestCase):
         db = FakeDatabase()
         midware = FakeMiddleware(db, [])
         environ = {}
-        nova_limits.nova_preprocess(midware, environ)
+        keystone_limits.keystone_preprocess(midware, environ)
 
         self.assertEqual(environ, {
-                'turnstile.nova.tenant': '<NONE>',
-                'turnstile.nova.limitclass': 'default',
+                'turnstile.keystone.tenant': '<NONE>',
+                'turnstile.keystone.limitclass': 'default',
                 'nova.limits': [],
                 })
         self.assertEqual(db.actions, [
@@ -115,10 +114,10 @@ class TestPreprocess(unittest.TestCase):
         environ = {
             'nova.context': FakeObject(project_id='spam'),
             }
-        nova_limits.nova_preprocess(midware, environ)
+        keystone_limits.keystone_preprocess(midware, environ)
 
-        self.assertEqual(environ['turnstile.nova.tenant'], 'spam')
-        self.assertEqual(environ['turnstile.nova.limitclass'], 'default')
+        self.assertEqual(environ['turnstile.keystone.tenant'], 'spam')
+        self.assertEqual(environ['turnstile.keystone.limitclass'], 'default')
         self.assertEqual(environ['nova.limits'], [])
         self.assertEqual(db.actions, [
                 ('get', 'limit-class:spam'),
@@ -131,10 +130,10 @@ class TestPreprocess(unittest.TestCase):
         environ = {
             'nova.context': FakeObject(project_id='spam'),
             }
-        nova_limits.nova_preprocess(midware, environ)
+        keystone_limits.keystone_preprocess(midware, environ)
 
-        self.assertEqual(environ['turnstile.nova.tenant'], 'spam')
-        self.assertEqual(environ['turnstile.nova.limitclass'], 'lim_class')
+        self.assertEqual(environ['turnstile.keystone.tenant'], 'spam')
+        self.assertEqual(environ['turnstile.keystone.limitclass'], 'lim_class')
         self.assertEqual(environ['nova.limits'], [])
         self.assertEqual(db.actions, [
                 ('get', 'limit-class:spam'),
@@ -146,12 +145,12 @@ class TestPreprocess(unittest.TestCase):
         midware = FakeMiddleware(db, [])
         environ = {
             'nova.context': FakeObject(project_id='spam'),
-            'turnstile.nova.limitclass': 'override',
+            'turnstile.keystone.limitclass': 'override',
             }
-        nova_limits.nova_preprocess(midware, environ)
+        keystone_limits.keystone_preprocess(midware, environ)
 
-        self.assertEqual(environ['turnstile.nova.tenant'], 'spam')
-        self.assertEqual(environ['turnstile.nova.limitclass'], 'override')
+        self.assertEqual(environ['turnstile.keystone.tenant'], 'spam')
+        self.assertEqual(environ['turnstile.keystone.limitclass'], 'override')
         self.assertEqual(environ['nova.limits'], [])
         self.assertEqual(db.actions, [
                 ('get', 'limit-class:spam'),
@@ -209,10 +208,10 @@ class TestPreprocess(unittest.TestCase):
         environ = {
             'nova.context': FakeObject(project_id='spam'),
             }
-        nova_limits.nova_preprocess(midware, environ)
+        keystone_limits.keystone_preprocess(midware, environ)
 
-        self.assertEqual(environ['turnstile.nova.tenant'], 'spam')
-        self.assertEqual(environ['turnstile.nova.limitclass'], 'lim_class')
+        self.assertEqual(environ['turnstile.keystone.tenant'], 'spam')
+        self.assertEqual(environ['turnstile.keystone.limitclass'], 'lim_class')
         self.assertEqual(environ['nova.limits'], [
                 dict(
                     verb='GET',
@@ -370,10 +369,10 @@ class TestPreprocess(unittest.TestCase):
         environ = {
             'nova.context': FakeObject(project_id='spam'),
             }
-        nova_limits.nova_preprocess(midware, environ)
+        keystone_limits.keystone_preprocess(midware, environ)
 
-        self.assertEqual(environ['turnstile.nova.tenant'], 'spam')
-        self.assertEqual(environ['turnstile.nova.limitclass'], 'lim_class')
+        self.assertEqual(environ['turnstile.keystone.tenant'], 'spam')
+        self.assertEqual(environ['turnstile.keystone.limitclass'], 'lim_class')
         self.assertEqual(environ['nova.limits'], [
                 dict(
                     verb='GET',
@@ -441,11 +440,12 @@ class TestPreprocess(unittest.TestCase):
                 ])
 
 
-class TestNovaClassLimit(unittest.TestCase):
+class TestKeystoneClassLimit(unittest.TestCase):
     def setUp(self):
-        self.lim = nova_limits.NovaClassLimit('db', uri='/spam', value=18,
-                                              unit='second',
-                                              rate_class='lim_class')
+        self.lim = keystone_limits.KeystoneClassLimit('db', uri='/spam',
+                                                      value=18,
+                                                      unit='second',
+                                                      rate_class='lim_class')
 
     def test_route_base(self):
         route_args = {}
@@ -479,21 +479,21 @@ class TestNovaClassLimit(unittest.TestCase):
 
     def test_filter_noclass(self):
         environ = {
-            'turnstile.nova.tenant': 'tenant',
+            'turnstile.keystone.tenant': 'tenant',
             }
         params = {}
         unused = {}
         self.assertRaises(limits.DeferLimit,
                           self.lim.filter, environ, params, unused)
         self.assertEqual(environ, {
-                'turnstile.nova.tenant': 'tenant',
+                'turnstile.keystone.tenant': 'tenant',
                 })
         self.assertEqual(params, {})
         self.assertEqual(unused, {})
 
     def test_filter_notenant(self):
         environ = {
-            'turnstile.nova.limitclass': 'lim_class',
+            'turnstile.keystone.limitclass': 'lim_class',
             }
         params = {}
         unused = {}
@@ -501,15 +501,15 @@ class TestNovaClassLimit(unittest.TestCase):
                           self.lim.filter, environ, params, unused)
 
         self.assertEqual(environ, {
-                'turnstile.nova.limitclass': 'lim_class',
+                'turnstile.keystone.limitclass': 'lim_class',
                 })
         self.assertEqual(params, {})
         self.assertEqual(unused, {})
 
     def test_filter_wrong_class(self):
         environ = {
-            'turnstile.nova.limitclass': 'spam',
-            'turnstile.nova.tenant': 'tenant',
+            'turnstile.keystone.limitclass': 'spam',
+            'turnstile.keystone.tenant': 'tenant',
             }
         params = {}
         unused = {}
@@ -517,37 +517,37 @@ class TestNovaClassLimit(unittest.TestCase):
                           self.lim.filter, environ, params, unused)
 
         self.assertEqual(environ, {
-                'turnstile.nova.limitclass': 'spam',
-                'turnstile.nova.tenant': 'tenant',
+                'turnstile.keystone.limitclass': 'spam',
+                'turnstile.keystone.tenant': 'tenant',
                 })
         self.assertEqual(params, {})
         self.assertEqual(unused, {})
 
     def test_filter(self):
         environ = {
-            'turnstile.nova.limitclass': 'lim_class',
-            'turnstile.nova.tenant': 'tenant',
+            'turnstile.keystone.limitclass': 'lim_class',
+            'turnstile.keystone.tenant': 'tenant',
             }
         params = {}
         unused = {}
         self.lim.filter(environ, params, unused)
 
         self.assertEqual(environ, {
-                'turnstile.nova.limitclass': 'lim_class',
-                'turnstile.nova.tenant': 'tenant',
+                'turnstile.keystone.limitclass': 'lim_class',
+                'turnstile.keystone.tenant': 'tenant',
                 })
         self.assertEqual(params, dict(tenant='tenant'))
         self.assertEqual(unused, {})
 
 
-class StubNovaTurnstileMiddleware(nova_limits.NovaTurnstileMiddleware):
+class StubKeystoneTurnstileMiddleware(keystone_limits.KeystoneTurnstileMiddleware):
     def __init__(self):
         pass
 
 
-class TestNovaTurnstileMiddleware(unittest.TestCase):
+class TestKeystoneTurnstileMiddleware(unittest.TestCase):
     def setUp(self):
-        self.midware = StubNovaTurnstileMiddleware()
+        self.midware = StubKeystoneTurnstileMiddleware()
         self.stubs = stubout.StubOutForTesting()
 
         def fake_over_limit_fault(msg, err, retry):
@@ -555,7 +555,7 @@ class TestNovaTurnstileMiddleware(unittest.TestCase):
                 return (msg, err, retry, environ, start_response)
             return inner
 
-        self.stubs.Set(wsgi, 'OverLimitFault', fake_over_limit_fault)
+        self.stubs.Set(keystone_limits, 'OverLimitFault', fake_over_limit_fault)
         self.stubs.Set(time, 'time', lambda: 1000000000)
 
     def tearDown(self):
@@ -593,7 +593,7 @@ class TestLimitClass(unittest.TestCase):
 
     def test_get(self):
         self.fake_db.fake_db['limit-class:spam'] = 'lim_class'
-        old_klass = nova_limits._limit_class('config_file', 'spam')
+        old_klass = keystone_limits._limit_class('config_file', 'spam')
 
         self.assertEqual(self.fake_db.fake_db, {
                 'limit-class:spam': 'lim_class',
@@ -604,7 +604,7 @@ class TestLimitClass(unittest.TestCase):
         self.assertEqual(old_klass, 'lim_class')
 
     def test_get_undeclared(self):
-        old_klass = nova_limits._limit_class('config_file', 'spam')
+        old_klass = keystone_limits._limit_class('config_file', 'spam')
 
         self.assertEqual(self.fake_db.fake_db, {})
         self.assertEqual(self.fake_db.actions, [
@@ -614,7 +614,7 @@ class TestLimitClass(unittest.TestCase):
 
     def test_set(self):
         self.fake_db.fake_db['limit-class:spam'] = 'old_class'
-        old_klass = nova_limits._limit_class('config_file', 'spam',
+        old_klass = keystone_limits._limit_class('config_file', 'spam',
                                              'new_class')
 
         self.assertEqual(self.fake_db.fake_db, {
@@ -627,7 +627,7 @@ class TestLimitClass(unittest.TestCase):
         self.assertEqual(old_klass, 'old_class')
 
     def test_set_undeclared(self):
-        old_klass = nova_limits._limit_class('config_file', 'spam',
+        old_klass = keystone_limits._limit_class('config_file', 'spam',
                                              'new_class')
 
         self.assertEqual(self.fake_db.fake_db, {
@@ -641,7 +641,7 @@ class TestLimitClass(unittest.TestCase):
 
     def test_set_unchanged(self):
         self.fake_db.fake_db['limit-class:spam'] = 'lim_class'
-        old_klass = nova_limits._limit_class('config_file', 'spam',
+        old_klass = keystone_limits._limit_class('config_file', 'spam',
                                              'lim_class')
 
         self.assertEqual(self.fake_db.fake_db, {
@@ -654,7 +654,7 @@ class TestLimitClass(unittest.TestCase):
 
     def test_delete(self):
         self.fake_db.fake_db['limit-class:spam'] = 'old_class'
-        old_klass = nova_limits._limit_class('config_file', 'spam', 'default')
+        old_klass = keystone_limits._limit_class('config_file', 'spam', 'default')
 
         self.assertEqual(self.fake_db.fake_db, {})
         self.assertEqual(self.fake_db.actions, [
@@ -664,7 +664,7 @@ class TestLimitClass(unittest.TestCase):
         self.assertEqual(old_klass, 'old_class')
 
     def test_delete_undeclared(self):
-        old_klass = nova_limits._limit_class('config_file', 'spam', 'default')
+        old_klass = keystone_limits._limit_class('config_file', 'spam', 'default')
 
         self.assertEqual(self.fake_db.fake_db, {})
         self.assertEqual(self.fake_db.actions, [
@@ -714,7 +714,7 @@ class TestToolLimitClass(unittest.TestCase):
         def fake_argument_parser(*args, **kwargs):
             return FakeArgumentParser(self.args_dict)
 
-        self.stubs.Set(nova_limits, '_limit_class', fake_limit_class)
+        self.stubs.Set(keystone_limits, '_limit_class', fake_limit_class)
         self.stubs.Set(argparse, 'ArgumentParser', fake_argument_parser)
         self.stubs.Set(sys, 'stdout', self.stdout)
 
@@ -723,7 +723,7 @@ class TestToolLimitClass(unittest.TestCase):
 
     def test_noargs(self):
         self.limit_class_result = 'default'
-        result = nova_limits.limit_class()
+        result = keystone_limits.limit_class()
 
         self.assertEqual(self.limit_class_args, ('config', 'spam', None))
         self.assertEqual(self.stdout.getvalue(),
@@ -733,7 +733,7 @@ class TestToolLimitClass(unittest.TestCase):
 
     def test_failure(self):
         self.limit_class_result = Exception("foobar")
-        result = nova_limits.limit_class()
+        result = keystone_limits.limit_class()
 
         self.assertEqual(result, "foobar")
         self.assertEqual(self.stdout.getvalue(), '')
@@ -744,13 +744,13 @@ class TestToolLimitClass(unittest.TestCase):
 
         self.args_dict['debug'] = True
         self.limit_class_result = AnException("foobar")
-        self.assertRaises(Exception, nova_limits.limit_class)
+        self.assertRaises(Exception, keystone_limits.limit_class)
         self.assertEqual(self.stdout.getvalue(), '')
 
     def test_update(self):
         self.args_dict['klass'] = 'new_class'
         self.limit_class_result = 'old_class'
-        nova_limits.limit_class()
+        keystone_limits.limit_class()
 
         self.assertEqual(self.limit_class_args,
                          ('config', 'spam', 'new_class'))
