@@ -1,3 +1,4 @@
+# Copyright 2012 SUSE Linux Products Gmbh
 # Copyright 2012 Rackspace
 # All Rights Reserved.
 #
