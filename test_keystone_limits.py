@@ -205,19 +205,19 @@ class TestKeystoneClassLimit(unittest.TestCase):
 
     def test_filter_noclass(self):
         environ = {
-            'turnstile.keystone.tenant': 'tenant',
+            'turnstile.keystone.user_id': 'user1',
             }
         params = {}
         unused = {}
         self.assertRaises(limits.DeferLimit,
                           self.lim.filter, environ, params, unused)
         self.assertEqual(environ, {
-                'turnstile.keystone.tenant': 'tenant',
+                'turnstile.keystone.user_id': 'user1',
                 })
         self.assertEqual(params, {})
         self.assertEqual(unused, {})
 
-    def test_filter_notenant(self):
+    def test_filter_nouser(self):
         environ = {
             'turnstile.keystone.limitclass': 'lim_class',
             }
@@ -235,7 +235,7 @@ class TestKeystoneClassLimit(unittest.TestCase):
     def test_filter_wrong_class(self):
         environ = {
             'turnstile.keystone.limitclass': 'spam',
-            'turnstile.keystone.tenant': 'tenant',
+            'turnstile.keystone.user_id': 'user1',
             }
         params = {}
         unused = {}
@@ -244,7 +244,7 @@ class TestKeystoneClassLimit(unittest.TestCase):
 
         self.assertEqual(environ, {
                 'turnstile.keystone.limitclass': 'spam',
-                'turnstile.keystone.tenant': 'tenant',
+                'turnstile.keystone.user_id': 'user1',
                 })
         self.assertEqual(params, {})
         self.assertEqual(unused, {})
@@ -252,7 +252,7 @@ class TestKeystoneClassLimit(unittest.TestCase):
     def test_filter(self):
         environ = {
             'turnstile.keystone.limitclass': 'lim_class',
-            'turnstile.keystone.tenant': 'tenant',
+            'turnstile.keystone.user_id': 'user1',
             }
         params = {}
         unused = {}
@@ -260,9 +260,9 @@ class TestKeystoneClassLimit(unittest.TestCase):
 
         self.assertEqual(environ, {
                 'turnstile.keystone.limitclass': 'lim_class',
-                'turnstile.keystone.tenant': 'tenant',
+                'turnstile.keystone.user_id': 'user1',
                 })
-        self.assertEqual(params, dict(tenant='tenant'))
+        self.assertEqual(params, dict(userid='user1'))
         self.assertEqual(unused, {})
 
 
