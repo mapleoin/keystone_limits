@@ -147,9 +147,9 @@ def keystone_preprocess(midware, environ):
 
 class KeystoneClassLimit(limits.Limit):
     """
-    Rate limiting class for applying rate limits to classes of Nova
-    tenants.  The nova_limits:nova_preprocess preprocessor must be
-    configured for this limit class to match.
+    Rate limiting class for applying rate limits to combinations of
+    Keystone user_ids + IP.  The keystone_limits:keystone_preprocess
+    preprocessor must be configured for this limit class to match.
     """
 
     attrs = dict(
