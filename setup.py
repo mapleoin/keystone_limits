@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import os
 from setuptools import setup
 
@@ -7,13 +10,13 @@ def read(fname):
 
 
 setup(
-    name='nova_limits',
+    name='keystone_limits',
     version='0.5.2',
-    author='Kevin L. Mitchell',
-    author_email='kevin.mitchell@rackspace.com',
-    description="Nova-specific rate-limit class for turnstile",
+    author='Kevin L. Mitchell, Ionuț Arțăriși',
+    author_email='iartarisi@suse.cz',
+    description="Keystone-specific rate-limit class for turnstile",
     license='Apache License (2.0)',
-    py_modules=['nova_limits'],
+    py_modules=['keystone_limits'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Web Environment',
@@ -23,11 +26,11 @@ setup(
         'Programming Language :: Python',
         'Topic :: Internet :: WWW/HTTP :: WSGI :: Middleware',
         ],
-    url='https://github.com/klmitch/nova_limits',
+    url='https://github.com/mapleoin/keystone_limits',
     long_description=read('README.rst'),
     entry_points={
         'console_scripts': [
-            'limit_class = nova_limits:limit_class',
+            'limit_class = keystone_limits:limit_class',
             ],
         },
     install_requires=[
