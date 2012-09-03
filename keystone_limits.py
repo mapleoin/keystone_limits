@@ -29,7 +29,7 @@ from keystone import identity
 from keystone import token
 from keystone.common import logging
 from keystone.common.wsgi import Request
-from keystone.exception import Error
+from keystone.exception import Error, TokenNotFound
 
 LOG = logging.getLogger(__name__)
 
@@ -120,7 +120,11 @@ def keystone_preprocess(midware, environ):
             user_id = username
     else:
         token_api = token.Manager()
-        user_id = token_api.get_token(context, token_id)['user']['id']
+        try:
+            user_id = token_api.get_token(context, token_id)['user']['id']
+        except TokenNotFound as e:
+            LOG.warning(e)
+            user_id = '<NONE>'
 
     user_ip = environ['REMOTE_ADDR']
     LOG.info("Found user_id: %s with IP: %s" % (user_id, user_ip))

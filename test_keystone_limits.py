@@ -9,6 +9,7 @@ import msgpack
 import stubout
 from turnstile import config
 from turnstile import limits
+from keystone.token.backends.kvs import Token
 
 import keystone_limits
 
@@ -80,62 +81,73 @@ class TestPreprocess(unittest.TestCase):
     def tearDown(self):
         self.stubs.UnsetAll()
 
-    def test_basic(self):
+    def test_unknown_user(self):
         db = FakeDatabase()
         midware = FakeMiddleware(db, [])
-        environ = {}
+        environ = {
+            'openstack.context': dict(token_id='tokenid'),
+            'REMOTE_ADDR': '127.0.0.1',
+            }
         keystone_limits.keystone_preprocess(midware, environ)
 
         self.assertEqual(environ, {
-                'turnstile.keystone.tenant': '<NONE>',
-                'turnstile.keystone.limitclass': 'default',
-                'nova.limits': [],
+                'REMOTE_ADDR': '127.0.0.1',
+                'openstack.context': dict(token_id='tokenid'),
+                'turnstile.keystone.limitclass': 'ip-class',
+                'turnstile.keystone.user_id': '<NONE>:127.0.0.1',
                 })
-        self.assertEqual(db.actions, [('get', 'limit-class:<NONE>')])
+        self.assertEqual(db.actions, [
+                ('get', 'limit-class:<NONE>:127.0.0.1'),
+                ('set', 'limit-class:<NONE>:127.0.0.1', 'ip-class')])
 
-    def test_tenant(self):
+    def test_user_id_existing_limit_class(self):
+        db = FakeDatabase({'limit-class:1:127.0.0.1': 'ip-class'})
+        midware = FakeMiddleware(db, [])
+        environ = {
+            'openstack.context': dict(token_id='tokenid'),
+            'REMOTE_ADDR': '127.0.0.1',
+            }
+        self.stubs.Set(Token, 'get_token',
+                       lambda x, y: {'user': {'id': 1}})
+        keystone_limits.keystone_preprocess(midware, environ)
+
+        self.assertEqual(environ['turnstile.keystone.user_id'], '1:127.0.0.1')
+        self.assertEqual(environ['turnstile.keystone.limitclass'], 'ip-class')
+        self.assertEqual(db.actions, [('get', 'limit-class:1:127.0.0.1')])
+
+    def test_user_id(self):
         db = FakeDatabase()
         midware = FakeMiddleware(db, [])
         environ = {
-            'nova.context': FakeObject(project_id='spam'),
+            'openstack.context': dict(token_id='tokenid'),
+            'REMOTE_ADDR': '127.0.0.1',
             }
+        self.stubs.Set(Token, 'get_token',
+                       lambda x, y: {'user': {'id': 1}})
         keystone_limits.keystone_preprocess(midware, environ)
 
-        self.assertEqual(environ['turnstile.keystone.tenant'], 'spam')
-        self.assertEqual(environ['turnstile.keystone.limitclass'], 'default')
-        self.assertEqual(environ['nova.limits'], [])
+        self.assertEqual(environ['turnstile.keystone.user_id'], '1:127.0.0.1')
+        self.assertEqual(environ['turnstile.keystone.limitclass'], 'ip-class')
         self.assertEqual(db.actions, [
-                ('get', 'limit-class:spam'),
-                ])
-
-    def test_configured_class(self):
-        db = FakeDatabase({'limit-class:spam': 'lim_class'})
-        midware = FakeMiddleware(db, [])
-        environ = {
-            'nova.context': FakeObject(project_id='spam'),
-            }
-        keystone_limits.keystone_preprocess(midware, environ)
-
-        self.assertEqual(environ['turnstile.keystone.tenant'], 'spam')
-        self.assertEqual(environ['turnstile.keystone.limitclass'], 'lim_class')
-        self.assertEqual(environ['nova.limits'], [])
-        self.assertEqual(db.actions, [
-                ('get', 'limit-class:spam'),
+                ('get', 'limit-class:1:127.0.0.1'),
+                ('set', 'limit-class:1:127.0.0.1', 'ip-class'),
                 ])
 
     def test_class_no_override(self):
-        db = FakeDatabase({'limit-class:spam': 'lim_class'})
+        db = FakeDatabase({'limit-class:1:127.0.0.1': 'lim_class'})
         midware = FakeMiddleware(db, [])
         environ = {
-            'nova.context': FakeObject(project_id='spam'),
+            'openstack.context': dict(token_id='tokenid'),
+            'REMOTE_ADDR': '127.0.0.1',
             'turnstile.keystone.limitclass': 'override',
             }
+        self.stubs.Set(Token, 'get_token',
+                       lambda x, y: {'user': {'id': 1}})
         keystone_limits.keystone_preprocess(midware, environ)
 
-        self.assertEqual(environ['turnstile.keystone.tenant'], 'spam')
+        self.assertEqual(environ['turnstile.keystone.user_id'], '1:127.0.0.1')
         self.assertEqual(environ['turnstile.keystone.limitclass'], 'override')
-        self.assertEqual(environ['nova.limits'], [])
-        self.assertEqual(db.actions, [('get', 'limit-class:spam')])
+        self.assertEqual(db.actions, [('get', 'limit-class:1:127.0.0.1')])
 
 
 class TestKeystoneClassLimit(unittest.TestCase):
