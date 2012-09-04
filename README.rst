@@ -16,7 +16,7 @@ the following configuration::
     preprocess = keystone_limits:keystone_preprocess
     redis.host = <your Redis database host>
 
-Then you must add the `turnstile` filter to your pipelines:
+Then you must add the `turnstile` filter to your pipelines::
 
     [pipeline:public_api]
     pipeline = stats_monitoring url_normalize token_auth admin_token_auth xml_body json_body debug ec2_extension user_crud_extension turnstile public_service
@@ -29,8 +29,8 @@ Setup Limits
 ============
 
 In order to read and write limits, you need to use the turnstile
-``setup_limits`` and ``load_limits`` commands. Sample configuration and limit files are provided in the `etc/` directory.
-
+``setup_limits`` and ``load_limits`` commands. Sample configuration and
+limit files are provided in the `etc/` directory::
 
     setup_limits etc/keystone_limits.conf etc/default_limits.xml
 
@@ -54,9 +54,11 @@ In order to read and write limits, you need to use the turnstile
       </limit>
     </limits>
 
-
 Do not modify the ``rate_class`` as it is currently hardcoded.
 
-With the above configuration, the middleware will limit requests to the ``/tokens`` URL to 2 POSTs per minute. These values are configurable in the XML. After you've changed them, they need to be reloaded into the redis database using the ``setup_limits`` command.
+With the above configuration, the middleware will limit requests to the
+``/tokens`` URL to 2 POSTs per minute. These values are configurable in
+the XML. After you've changed them, they need to be reloaded into the
+redis database using the ``setup_limits`` command.
 
 Requests are limited per (Keystone user_id + ip combination).
