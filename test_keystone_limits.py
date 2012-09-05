@@ -73,20 +73,6 @@ class FakeLimit(FakeObject):
         return json.loads(params)
 
 
-class TestParamsDict(unittest.TestCase):
-    def test_known_keys(self):
-        d = keystone_limits.ParamsDict(dict(a=1, bravo=2))
-
-        self.assertEqual(d['a'], 1)
-        self.assertEqual(d['bravo'], 2)
-
-    def test_unknown_keys(self):
-        d = keystone_limits.ParamsDict(dict(a=1, b=2))
-
-        self.assertEqual(d['c'], '{c}')
-        self.assertEqual(d['delta'], '{delta}')
-
-
 class TestPreprocess(unittest.TestCase):
     def setUp(self):
         self.stubs = stubout.StubOutForTesting()

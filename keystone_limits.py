@@ -76,20 +76,6 @@ class OverLimitFault(webob.exc.HTTPException):
         return self.wrapped_exc
 
     
-class ParamsDict(dict):
-    """
-    Special dictionary for use with our URI formatter below.  Unknown
-    keys default to '{key}'.
-    """
-
-    def __missing__(self, key):
-        """
-        If the key is unknown, return it surrounded by braces.
-        """
-
-        return '{%s}' % key
-
-
 def keystone_preprocess(midware, environ):
     """
     Pre-process requests to keystone.  The tenant name is extracted from
