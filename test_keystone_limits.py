@@ -15,12 +15,9 @@
 #    under the License.
 
 import json
-import StringIO
-import sys
 import time
 import unittest
 
-import argparse
 import msgpack
 import stubout
 from turnstile import config
@@ -73,91 +70,11 @@ class FakeLimit(FakeObject):
         return json.loads(params)
 
 
-class TestPreprocess(unittest.TestCase):
-    def setUp(self):
-        self.stubs = stubout.StubOutForTesting()
-
-        self.stubs.Set(time, 'time', lambda: 1000000000)
-        self.stubs.Set(msgpack, 'loads', lambda x: x)
-
-    def tearDown(self):
-        self.stubs.UnsetAll()
-
-    def test_unknown_user(self):
-        db = FakeDatabase()
-        midware = FakeMiddleware(db, [])
-        environ = {
-            'openstack.context': dict(token_id='tokenid'),
-            'REMOTE_ADDR': '127.0.0.1',
-            }
-        keystone_limits.keystone_preprocess(midware, environ)
-
-        self.assertEqual(environ, {
-                'REMOTE_ADDR': '127.0.0.1',
-                'openstack.context': dict(token_id='tokenid'),
-                'turnstile.keystone.limitclass': 'ip-class',
-                'turnstile.keystone.user_id': '<NONE>:127.0.0.1',
-                })
-        self.assertEqual(db.actions, [
-                ('get', 'limit-class:<NONE>:127.0.0.1'),
-                ('set', 'limit-class:<NONE>:127.0.0.1', 'ip-class')])
-
-    def test_user_id_existing_limit_class(self):
-        db = FakeDatabase({'limit-class:1:127.0.0.1': 'ip-class'})
-        midware = FakeMiddleware(db, [])
-        environ = {
-            'openstack.context': dict(token_id='tokenid'),
-            'REMOTE_ADDR': '127.0.0.1',
-            }
-        self.stubs.Set(Token, 'get_token',
-                       lambda x, y: {'user': {'id': 1}})
-        keystone_limits.keystone_preprocess(midware, environ)
-
-        self.assertEqual(environ['turnstile.keystone.user_id'], '1:127.0.0.1')
-        self.assertEqual(environ['turnstile.keystone.limitclass'], 'ip-class')
-        self.assertEqual(db.actions, [('get', 'limit-class:1:127.0.0.1')])
-
-    def test_user_id(self):
-        db = FakeDatabase()
-        midware = FakeMiddleware(db, [])
-        environ = {
-            'openstack.context': dict(token_id='tokenid'),
-            'REMOTE_ADDR': '127.0.0.1',
-            }
-        self.stubs.Set(Token, 'get_token',
-                       lambda x, y: {'user': {'id': 1}})
-        keystone_limits.keystone_preprocess(midware, environ)
-
-        self.assertEqual(environ['turnstile.keystone.user_id'], '1:127.0.0.1')
-        self.assertEqual(environ['turnstile.keystone.limitclass'], 'ip-class')
-        self.assertEqual(db.actions, [
-                ('get', 'limit-class:1:127.0.0.1'),
-                ('set', 'limit-class:1:127.0.0.1', 'ip-class'),
-                ])
-
-    def test_class_no_override(self):
-        db = FakeDatabase({'limit-class:1:127.0.0.1': 'lim_class'})
-        midware = FakeMiddleware(db, [])
-        environ = {
-            'openstack.context': dict(token_id='tokenid'),
-            'REMOTE_ADDR': '127.0.0.1',
-            'turnstile.keystone.limitclass': 'override',
-            }
-        self.stubs.Set(Token, 'get_token',
-                       lambda x, y: {'user': {'id': 1}})
-        keystone_limits.keystone_preprocess(midware, environ)
-
-        self.assertEqual(environ['turnstile.keystone.user_id'], '1:127.0.0.1')
-        self.assertEqual(environ['turnstile.keystone.limitclass'], 'override')
-        self.assertEqual(db.actions, [('get', 'limit-class:1:127.0.0.1')])
-
-
 class TestKeystoneClassLimit(unittest.TestCase):
     def setUp(self):
         self.lim = keystone_limits.KeystoneClassLimit('db', uri='/spam',
                                                       value=18,
-                                                      unit='second',
-                                                      rate_class='lim_class')
+                                                      unit='second')
 
     def test_route_base(self):
         route_args = {}
@@ -189,66 +106,14 @@ class TestKeystoneClassLimit(unittest.TestCase):
 
         self.assertEqual(result, '/v2')
 
-    def test_filter_noclass(self):
-        environ = {
-            'turnstile.keystone.user_id': 'user1',
-            }
-        params = {}
-        unused = {}
-        self.assertRaises(limits.DeferLimit,
-                          self.lim.filter, environ, params, unused)
-        self.assertEqual(environ, {
-                'turnstile.keystone.user_id': 'user1',
-                })
-        self.assertEqual(params, {})
-        self.assertEqual(unused, {})
-
-    def test_filter_nouser(self):
-        environ = {
-            'turnstile.keystone.limitclass': 'lim_class',
-            }
-        params = {}
-        unused = {}
-        self.assertRaises(limits.DeferLimit,
-                          self.lim.filter, environ, params, unused)
-
-        self.assertEqual(environ, {
-                'turnstile.keystone.limitclass': 'lim_class',
-                })
-        self.assertEqual(params, {})
-        self.assertEqual(unused, {})
-
-    def test_filter_wrong_class(self):
-        environ = {
-            'turnstile.keystone.limitclass': 'spam',
-            'turnstile.keystone.user_id': 'user1',
-            }
-        params = {}
-        unused = {}
-        self.assertRaises(limits.DeferLimit,
-                          self.lim.filter, environ, params, unused)
-
-        self.assertEqual(environ, {
-                'turnstile.keystone.limitclass': 'spam',
-                'turnstile.keystone.user_id': 'user1',
-                })
-        self.assertEqual(params, {})
-        self.assertEqual(unused, {})
-
     def test_filter(self):
-        environ = {
-            'turnstile.keystone.limitclass': 'lim_class',
-            'turnstile.keystone.user_id': 'user1',
-            }
+        environ = { 'HTTP_X_REMOTE_ADDR': '127.0.0.1' }
         params = {}
         unused = {}
         self.lim.filter(environ, params, unused)
 
-        self.assertEqual(environ, {
-                'turnstile.keystone.limitclass': 'lim_class',
-                'turnstile.keystone.user_id': 'user1',
-                })
-        self.assertEqual(params, dict(userid='user1'))
+        self.assertEqual(environ, { 'HTTP_X_REMOTE_ADDR': '127.0.0.1' })
+        self.assertEqual(params, dict(original_addr='127.0.0.1'))
         self.assertEqual(unused, {})
 
 

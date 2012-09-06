@@ -14,10 +14,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import argparse
 import json
 import math
-import string
 import time
 
 import msgpack
@@ -76,74 +74,11 @@ class OverLimitFault(webob.exc.HTTPException):
         return self.wrapped_exc
 
     
-def keystone_preprocess(midware, environ):
-    """
-    Pre-process requests to keystone.  The tenant name is extracted from
-    the keystone context, and the applicable rate limit class is looked
-    up in the database.  Both pieces of data are attached to the request
-    environment.  This preprocessor must be present to use the
-    KeystoneClassLimit rate limiting class.
-    """
-
-    # We may need a formatter later on, so set one up
-    fmt = string.Formatter()
-
-    # NOTE(iartarisi) Is this the right context we need for passing around?
-    context = environ['openstack.context']  
-    try:
-        token_id = context['token_id']
-        assert token_id
-    except (KeyError, AssertionError):
-        auth = environ['openstack.params']['auth']
-        username = auth['passwordCredentials']['username']
-        try:
-            identity_api = identity.Manager()
-            user_id = identity_api.get_user_by_name(
-                context, username)['id']
-        except KeyError:
-            # couldn't find the username in the database. Maybe we're
-            # using a weird keystone backend like 'hybrid' and the
-            # user_id is the same as the username
-            user_id = username
-    else:
-        token_api = token.Manager()
-        try:
-            user_id = token_api.get_token(context, token_id)['user']['id']
-        except TokenNotFound as e:
-            LOG.warning(e)
-            user_id = '<NONE>'
-
-    user_ip = environ['REMOTE_ADDR']
-    LOG.info("Found user_id: %s with IP: %s" % (user_id, user_ip))
-
-    id_ip = '%s:%s' % (user_id, user_ip)
-    environ['turnstile.keystone.user_id'] = id_ip
-
-    # Now, figure out the rate limit class
-    klass = midware.db.get('limit-class:' + id_ip)
-    # Automatically create a new class for an ip if it doesn't
-    # exist. This will be a clone of the existing 'ip-class'.
-    if not klass:
-        midware.db.set('limit-class:' + id_ip, 'ip-class')
-        klass = 'ip-class'
-        
-    klass = environ.setdefault('turnstile.keystone.limitclass', klass)
-    LOG.debug("Rate limit class: %s" % klass)
-
-
 class KeystoneClassLimit(limits.Limit):
     """
     Rate limiting class for applying rate limits to combinations of
-    Keystone user_ids + IP.  The keystone_limits:keystone_preprocess
-    preprocessor must be configured for this limit class to match.
+    Keystone user_ids + IP.
     """
-
-    attrs = dict(
-        rate_class=dict(
-            desc=('The rate limiting class this limit applies to.  Required.'),
-            type=str,
-            ),
-        )
 
     def route(self, uri, route_args):
         """
@@ -159,18 +94,11 @@ class KeystoneClassLimit(limits.Limit):
 
     def filter(self, environ, params, unused):
         """
-        Determines whether this limit applies to this request and
-        attaches the tenant name to the params.
+        Attaches the original_addr to the parameters considered for filtering
         """
-
-        # Do we match?
-        if ('turnstile.keystone.user_id' not in environ or
-            'turnstile.keystone.limitclass' not in environ or
-            self.rate_class != environ['turnstile.keystone.limitclass']):
-            raise limits.DeferLimit()
-
-        # OK, add the tenant to the params
-        params['userid'] = environ['turnstile.keystone.user_id']
+        LOG.debug('Filtering request from: ' + environ['HTTP_X_REMOTE_ADDR'])
+        
+        params['original_addr'] = environ['HTTP_X_REMOTE_ADDR']
 
 
 class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):

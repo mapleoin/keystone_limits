@@ -1,7 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <limits>
   <limit class="keystone_limits:KeystoneClassLimit">
-    <attr name="rate_class">ip-class</attr>
     <attr name="unit">minute</attr>
     <attr name="uri">/tokens</attr>
     <attr name="value">2</attr>

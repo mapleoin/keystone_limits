@@ -13,7 +13,6 @@ the following configuration::
     [filter:turnstile]
     paste.filter_factory = turnstile.middleware:turnstile_filter
     turnstile = keystone_limits:KeystoneTurnstileMiddleware
-    preprocess = keystone_limits:keystone_preprocess
     redis.host = <your Redis database host>
 
 Then you must add the `turnstile` filter to your pipelines::
@@ -42,7 +41,6 @@ limit files are provided in the `etc/` directory::
     <limits>
       <limit class="keystone_limits:KeystoneClassLimit">
         <attr name="queries"/>
-        <attr name="rate_class">ip-class</attr>
         <attr name="unit">minute</attr>
         <attr name="uri">/tokens</attr>
         <attr name="use"/>
@@ -54,11 +52,9 @@ limit files are provided in the `etc/` directory::
       </limit>
     </limits>
 
-Do not modify the ``rate_class`` as it is currently hardcoded.
-
 With the above configuration, the middleware will limit requests to the
 ``/tokens`` URL to 2 POSTs per minute. These values are configurable in
 the XML. After you've changed them, they need to be reloaded into the
 redis database using the ``setup_limits`` command.
 
-Requests are limited per (Keystone user_id + ip combination).
+Requests are limited based on incoming IP address.
