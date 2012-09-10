@@ -69,6 +69,94 @@ class FakeLimit(FakeObject):
             return {}
         return json.loads(params)
 
+class TestPreprocess(unittest.TestCase):
+    def setUp(self):
+        self.stubs = stubout.StubOutForTesting()
+
+        self.stubs.Set(time, 'time', lambda: 1000000000)
+        self.stubs.Set(msgpack, 'loads', lambda x: x)
+
+    def tearDown(self):
+        self.stubs.UnsetAll()
+
+    def test_no_headers(self):
+        db = FakeDatabase()
+        midware = FakeMiddleware(db, [])
+        environ = { 'REMOTE_ADDR': '127.0.0.1',
+                    'PATH_INFO': '/foo'}
+        keystone_limits.keystone_preprocess(midware, environ)
+        self.assertEqual(environ, {
+                'REMOTE_ADDR': '127.0.0.1',
+                'PATH_INFO': '/foo'})
+
+    def test_x_auth_token(self):
+        db = FakeDatabase()
+        midware = FakeMiddleware(db, [])
+        environ = { 'REMOTE_ADDR': '127.0.0.1',
+                    'PATH_INFO': '/foo',
+                    'HTTP_X_AUTH_TOKEN': '12345'}
+        keystone_limits.keystone_preprocess(midware, environ)
+
+        self.assertEqual(environ, {
+                'REMOTE_ADDR': '127.0.0.1',
+                'PATH_INFO': '/foo',
+                'HTTP_X_AUTH_TOKEN': '12345',
+                'keystone.auth_request': True})
+
+    def test_x_storage_token(self):
+        db = FakeDatabase()
+        midware = FakeMiddleware(db, [])
+        environ = { 'REMOTE_ADDR': '127.0.0.1',
+                    'PATH_INFO': '/foo',
+                    'HTTP_X_STORAGE_TOKEN': '12345'}
+        keystone_limits.keystone_preprocess(midware, environ)
+
+        self.assertEqual(environ, {
+                'REMOTE_ADDR': '127.0.0.1',
+                'PATH_INFO': '/foo',
+                'HTTP_X_STORAGE_TOKEN': '12345',
+                'keystone.auth_request': True})
+
+    def test_tokens_get_doesnt_require_auth(self):
+        db = FakeDatabase()
+        midware = FakeMiddleware(db, [])
+        environ = { 'REMOTE_ADDR': '127.0.0.1',
+                    'PATH_INFO': '/tokens',
+                    'REQUEST_METHOD': 'GET'}
+        keystone_limits.keystone_preprocess(midware, environ)
+
+        self.assertEqual(environ, {
+                'REMOTE_ADDR': '127.0.0.1',
+                'PATH_INFO': '/tokens',
+                'REQUEST_METHOD': 'GET'})
+
+    def test_tokens_post_other_urls_doesnt_require_auth(self):
+        db = FakeDatabase()
+        midware = FakeMiddleware(db, [])
+        environ = { 'REMOTE_ADDR': '127.0.0.1',
+                    'PATH_INFO': '/foo',
+                    'REQUEST_METHOD': 'POST'}
+        keystone_limits.keystone_preprocess(midware, environ)
+
+        self.assertEqual(environ, {
+                'REMOTE_ADDR': '127.0.0.1',
+                'PATH_INFO': '/foo',
+                'REQUEST_METHOD': 'POST'})
+        
+    def test_tokens_post_require_auth(self):
+        db = FakeDatabase()
+        midware = FakeMiddleware(db, [])
+        environ = { 'REMOTE_ADDR': '127.0.0.1',
+                    'PATH_INFO': '/tokens',
+                    'REQUEST_METHOD': 'POST'}
+        keystone_limits.keystone_preprocess(midware, environ)
+
+        self.assertEqual(environ, {
+                'REMOTE_ADDR': '127.0.0.1',
+                'PATH_INFO': '/tokens',
+                'REQUEST_METHOD': 'POST',
+                'keystone.auth_request': True})
+
 
 class TestKeystoneClassLimit(unittest.TestCase):
     def setUp(self):
@@ -107,15 +195,22 @@ class TestKeystoneClassLimit(unittest.TestCase):
         self.assertEqual(result, '/v2')
 
     def test_filter(self):
-        environ = { 'HTTP_X_REMOTE_ADDR': '127.0.0.1' }
+        environ = { 'HTTP_X_REMOTE_ADDR': '127.0.0.1',
+                    'keystone.auth_request': True}
         params = {}
         unused = {}
         self.lim.filter(environ, params, unused)
 
-        self.assertEqual(environ, { 'HTTP_X_REMOTE_ADDR': '127.0.0.1' })
+        self.assertEqual(environ, { 'HTTP_X_REMOTE_ADDR': '127.0.0.1',
+                                    'keystone.auth_request': True })
         self.assertEqual(params, dict(original_addr='127.0.0.1'))
         self.assertEqual(unused, {})
 
+    def test_filter_defer(self):
+        environ = params = unused = {}
+        self.assertRaises(limits.DeferLimit,
+                          self.lim.filter, environ, params, unused)
+        
 
 class StubKeystoneTurnstileMiddleware(keystone_limits.KeystoneTurnstileMiddleware):
     def __init__(self):

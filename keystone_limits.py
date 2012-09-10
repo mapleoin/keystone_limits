@@ -73,6 +73,20 @@ class OverLimitFault(webob.exc.HTTPException):
 
         return self.wrapped_exc
 
+
+def keystone_preprocess(midware, environ):
+    """
+    Pre-process requests to keystone. Figure out if this is an
+    authentication request. Two authentication methods are recognized:
+     - token based - these requests will contain the 'X-Auth-Token' or
+       'X-Storage-Token' headers
+     - credentials - this is done with a POST request to '/tokens'
+    """
+    if ('HTTP_X_AUTH_TOKEN' in environ or
+        'HTTP_X_STORAGE_TOKEN' in environ or
+        (environ['PATH_INFO'] == '/tokens' and
+         environ['REQUEST_METHOD'] == 'POST')):
+        environ['keystone.auth_request'] = True
     
 class KeystoneClassLimit(limits.Limit):
     """
@@ -84,7 +98,6 @@ class KeystoneClassLimit(limits.Limit):
         """
         Filter version identifiers off of the URI.
         """
-
         if uri.startswith('/v1.1/'):
             return uri[5:]
         elif uri.startswith('/v2/'):
@@ -96,9 +109,15 @@ class KeystoneClassLimit(limits.Limit):
         """
         Attaches the original_addr to the parameters considered for filtering
         """
-        LOG.debug('Filtering request from: ' + environ['HTTP_X_REMOTE_ADDR'])
+        # stop filtering if we haven't already validated this request
+        if environ.get('keystone.auth_request') is None:
+            raise limits.DeferLimit()
+
+        remote_addr = (environ.get('HTTP_X_REMOTE_ADDR')
+                       or environ['REMOTE_ADDR'])
+        LOG.info('Filtering request from: ' + remote_addr)
         
-        params['original_addr'] = environ['HTTP_X_REMOTE_ADDR']
+        params['original_addr'] = remote_addr
 
 
 class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):
