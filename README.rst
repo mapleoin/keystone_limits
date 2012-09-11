@@ -5,7 +5,7 @@ Keystone-specific Rate Limit Class for Turnstile
 This package provides the ``keystone_limits`` Python module, which
 contains the ``keystone_preprocess()`` preprocessor, the
 ``KeystoneClassLimit`` limit class, and the ``KeystoneTurnstileMiddleware``
-replacement middleware class, all for use with Turnstile.  These
+replacement middleware class, all for use with `Turnstile <https://github.com/klmitch/turnstile>`_.  These
 pieces work together to provide class-based rate limiting integration
 with keystone.  To use, you must configure the Turnstile middleware with
 the following configuration::
