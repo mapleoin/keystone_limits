@@ -36,7 +36,7 @@ setup(
     install_requires=[
         'argparse',
         'msgpack-python',
-        'nova',
+        'keystone',
         'turnstile',
         ],
     tests_require=[

@@ -1,4 +1,4 @@
 /build
 /dist
-/nova_limits.egg-info
+/keystone_limits.egg-info
 *.pyc
