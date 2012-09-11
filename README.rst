@@ -62,8 +62,8 @@ they need to be reloaded into the redis database using the
 With the above configuration, the middleware will limit requests to the
 ``/tokens`` URL to 2 POSTs per minute.
 
-You can set up additional rules using the [Routes
-syntax](http://routes.readthedocs.org/en/latest/setting_up.html).
+You can set up additional rules using the `Routes
+syntax <http://routes.readthedocs.org/en/latest/setting_up.html>`_.
 
 For example, keeping the example above, in case you wanted to limit all
 the other requests using a different rule, you could add another limit
