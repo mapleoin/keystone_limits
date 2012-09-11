@@ -24,6 +24,7 @@ from turnstile import limits
 from turnstile import middleware
 import webob
 
+from keystone import config
 from keystone import identity
 from keystone import token
 from keystone.common import logging
@@ -31,6 +32,7 @@ from keystone.common.wsgi import Request
 from keystone.exception import Error, TokenNotFound
 
 LOG = logging.getLogger(__name__)
+CONF = config.CONF
 
 
 class OverLimitFault(webob.exc.HTTPException):
@@ -94,6 +96,13 @@ class KeystoneClassLimit(limits.Limit):
     Keystone user_ids + IP.
     """
 
+    attrs = dict(
+        rate_class=dict(
+            desc=('The rate limiting class this limit applies to. Required.'),
+            type=str,
+            ),
+        )
+
     def route(self, uri, route_args):
         """
         Filter version identifiers off of the URI.
@@ -115,8 +124,10 @@ class KeystoneClassLimit(limits.Limit):
 
         remote_addr = (environ.get('HTTP_X_REMOTE_ADDR')
                        or environ['REMOTE_ADDR'])
-        LOG.info('Filtering request from: ' + remote_addr)
-        
+        if CONF.verbose:
+            LOG.info('Filtering request from: %s with rate class: %s' %
+                     (remote_addr, self.rate_class))
+
         params['original_addr'] = remote_addr
 
 
@@ -155,5 +166,5 @@ class KeystoneTurnstileMiddleware(middleware.TurnstileMiddleware):
         # Now let's call it and return the result
         response = fault(environ, start_response)
         LOG.warning(response)
-        
+
         return response

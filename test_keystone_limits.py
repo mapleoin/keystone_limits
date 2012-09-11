@@ -142,7 +142,7 @@ class TestPreprocess(unittest.TestCase):
                 'REMOTE_ADDR': '127.0.0.1',
                 'PATH_INFO': '/foo',
                 'REQUEST_METHOD': 'POST'})
-        
+
     def test_tokens_post_require_auth(self):
         db = FakeDatabase()
         midware = FakeMiddleware(db, [])
@@ -161,6 +161,7 @@ class TestPreprocess(unittest.TestCase):
 class TestKeystoneClassLimit(unittest.TestCase):
     def setUp(self):
         self.lim = keystone_limits.KeystoneClassLimit('db', uri='/spam',
+                                                      rate_class='default',
                                                       value=18,
                                                       unit='second')
 
@@ -210,7 +211,7 @@ class TestKeystoneClassLimit(unittest.TestCase):
         environ = params = unused = {}
         self.assertRaises(limits.DeferLimit,
                           self.lim.filter, environ, params, unused)
-        
+
 
 class StubKeystoneTurnstileMiddleware(keystone_limits.KeystoneTurnstileMiddleware):
     def __init__(self):

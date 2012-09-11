@@ -42,6 +42,7 @@ limit files are provided in the `etc/` directory::
     <?xml version='1.0' encoding='UTF-8'?>
     <limits>
         <limit class="keystone_limits:KeystoneClassLimit">
+            <attr name="rate_class">tokens</attr>
             <attr name="queries"/>
             <attr name="unit">minute</attr>
             <attr name="uri">/tokens</attr>
@@ -59,16 +60,22 @@ they need to be reloaded into the redis database using the
 ``setup_limits`` command.
 
 With the above configuration, the middleware will limit requests to the
-``/tokens`` URL to 2 POSTs per minute. This configuration is useful for limiting requests coming from Dashboard for example, which use a user/password combination to get a token from keystone. Requests which already send their own token will not be rate limited.
+``/tokens`` URL to 2 POSTs per minute.
 
-In order to limit token authentication requests, you either need to create a separate rule for each of the urls you want to limit (you could have separate rules for each URL this way) or just use a default limit for all URLs::
+You can set up additional rules using the [Routes
+syntax](http://routes.readthedocs.org/en/latest/setting_up.html).
+
+For example, keeping the example above, in case you wanted to limit all
+the other requests using a different rule, you could add another limit
+to the configuration file (and then reload using ``setup_limits``) ::
 
     <?xml version='1.0' encoding='UTF-8'?>
     <limits>
         <limit class="keystone_limits:KeystoneClassLimit">
+            <attr name="rate_class">tokens</default>
             <attr name="unit">minute</attr>
             <attr name="uri">{everything:.*}</attr>
-            <attr name="value">1</attr>
+            <attr name="value">10</attr>
         </limit>
     </limits>
 

@@ -3,6 +3,7 @@
   <limit class="keystone_limits:KeystoneClassLimit">
     <attr name="unit">minute</attr>
     <attr name="uri">/tokens</attr>
+    <attr name="rate_class">tokens</attr>
     <attr name="value">2</attr>
     <attr name="verbs">
       <value>POST</value>
@@ -11,7 +12,8 @@
 
   <limit class="keystone_limits:KeystoneClassLimit">
     <attr name="unit">minute</attr>
+    <attr name="rate_class">the_rest</attr>
     <attr name="uri">{everything:.*}</attr>
-    <attr name="value">1</attr>
+    <attr name="value">10</attr>
   </limit>
 </limits>
